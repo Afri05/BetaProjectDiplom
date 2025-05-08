@@ -1,16 +1,30 @@
 const uuid = require('uuid')
 const path = require('path')
-const { Device } = require('../models/models')
+const { Device, DeviceInfo } = require('../models/models')
 const ApiError = require('../error/apiError')
+const { title } = require('process')
 
 class deviceController { 
     async create(req, res, next) {
     try {
-        const { name, price, IdBrand, IdType, info } = req.body
+        let { name, price, brandId, typeId, info } = req.body
         const { img } = req.files 
         let fileName = uuid.v4() + '.jpg'
         img.mv(path.resolve(__dirname, '..', 'static', fileName))
-        const device = await Device.create({ name, price, IdBrand, IdType, info, img: fileName })
+        const device = await Device.create({ name, price, brandId, typeId, info, img: fileName })
+
+        if (info) {
+            info = JSON.parse(info)
+            info.forEach(i => 
+                DeviceInfo.create({
+                    title: i.title,
+                    description: i.description,
+                    deviceId: device.id
+                })
+            )
+        }
+
+        
         return res.json(device)
         
     } catch (e) {
@@ -18,27 +32,41 @@ class deviceController {
         }
         
     }
-     /* почему то бд не отдает значения, мб трабл в некоректной заполнености или неверном расположении ключей в моделе связей бд? Решить.
-    async getAll(req,res) { 
-        const {IdBrand, IdType} = req.query
+    
+    async getAll(req,res) {     
+        let {brandId, typeId, limit, page} = req.query
+        page = page || 1
+        limit = limit || 9
+        let offset = page * limit - limit
         let devices;
-        if(!IdBrand && !IdType) {
-            devices = await Device.findAll()
+        if(!brandId && !typeId) {
+            devices = await Device.findAndCountAll({limit, offset})
         }
-        if(IdBrand && !IdType) {
-            devices = await Device.findAll({where: {IdBrand}})
+        if(brandId && !typeId) {
+            devices = await Device.findAndCountAll({where: {brandId}, limit, offset})/*sequelize автоматом создает ключ brandId конкатенируя brand с Id благодаря связям belongsTo, поэтому brandId = неккоректное названия ключа*/ 
         }
-        if(!IdBrand && IdType) {
-            devices = await Device.findAll({where: {IdType}})
+        if(!brandId && typeId) {
+            devices = await Device.findAndCountAll({where: {typeId}, limit, offset})
         }
-        if(IdBrand && IdType) {
-            devices = await Device.findAll({where: {IdBrand, IdType}})
+        if(brandId && typeId) {
+            devices = await Device.findAndCountAll({where: {brandId, typeId}, limit, offset})
         }
          return res.json(devices)
     }
-*/
-    async getOne(req,res) { 
 
+    async getOne(req,res) { 
+        
+        const {id} = req.params
+        const device = await Device.findOne(
+        {   
+            where: {id},
+            include: [{model: DeviceInfo, as: 'info'}]    
+        },   
+
+    )
+        
+        return res.json(device)
+    
     }
     
     async check(req, res) { 
